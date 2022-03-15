@@ -247,6 +247,7 @@ class HistoryVisibility:
     JOINED: Final = "joined"
     SHARED: Final = "shared"
     WORLD_READABLE: Final = "world_readable"
+    INVISIBLE : Final = "invisible"
 
 
 class GuestAccess:
