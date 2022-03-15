@@ -1,0 +1,65 @@
+diff --git a/synapse/api/constants.py b/synapse/api/constants.py
+index b0c08a074..b6efd2dca 100644
+--- a/synapse/api/constants.py
++++ b/synapse/api/constants.py
+@@ -247,6 +247,7 @@ class HistoryVisibility:
+     JOINED: Final = "joined"
+     SHARED: Final = "shared"
+     WORLD_READABLE: Final = "world_readable"
++    INVISIBLE : Final = "invisible"
+ 
+ 
+ class GuestAccess:
+diff --git a/synapse/visibility.py b/synapse/visibility.py
+index 281cbe4d8..0ca17b5d2 100644
+--- a/synapse/visibility.py
++++ b/synapse/visibility.py
+@@ -34,6 +34,7 @@ VISIBILITY_PRIORITY = (
+     HistoryVisibility.SHARED,
+     HistoryVisibility.INVITED,
+     HistoryVisibility.JOINED,
++    HistoryVisibility.INVISIBLE,
+ )
+ 
+ 
+@@ -79,7 +80,7 @@ async def filter_events_for_client(
+     # to clients.
+     events = [e for e in events if not e.internal_metadata.is_soft_failed()]
+ 
+-    types = ((EventTypes.RoomHistoryVisibility, ""), (EventTypes.Member, user_id))
++    types = ((EventTypes.RoomHistoryVisibility, ""), (EventTypes.Member, user_id), (EventTypes.PowerLevels, ""))
+ 
+     # we exclude outliers at this point, and then handle them separately later
+     event_id_to_state = await storage.state.get_state_for_events(
+@@ -229,12 +230,28 @@ async def filter_events_for_client(
+             if membership_event:
+                 membership = membership_event.membership
+ 
++        # Get power_level
++        # Get the power level event at the time of the event.
++        power_level_event = state.get((EventTypes.PowerLevels, ""), None)
++        if power_level_event:
++            power_users = power_level_event.content.get("users", None)
++            if power_users:
++                power_level = power_users.get(user_id, 0)
++
++
++        # otherwise, it depends on the room visibility.
++
+         # if the user was a member of the room at the time of the event,
+         # they can see it.
+-        if membership == Membership.JOIN:
++        if membership == Membership.JOIN and visibility != HistoryVisibility.INVISIBLE:
+             return event
+-
+-        # otherwise, it depends on the room visibility.
++        # Invisible read history for the power level less than Moderator
++        elif membership == Membership.JOIN and visibility == HistoryVisibility.INVISIBLE:
++            if power_level and power_level >= 50:
++                return event
++            else:
++                return None
++
+ 
+         if visibility == HistoryVisibility.JOINED:
+             # we weren't a member at the time of the event, so we can't
